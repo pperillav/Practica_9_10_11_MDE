@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SAGA_METADATA>
+  <DATABASE></DATABASE>
+  <SOURCE></SOURCE>
+  <HISTORY saga-version="9.11.1">
+    <TOOL library="grid_calculus" id="1" name="Grid Calculator">
+      <OPTION type="grid_system" id="PARAMETERS_GRID_SYSTEM" name="Grid System">
+        <CELLSIZE>0.0002694945852359</CELLSIZE>
+        <XMIN>-74.21840453207702</XMIN>
+        <YMIN>4.503119771998543</YMIN>
+        <XMAX>-73.94917944142635</XMAX>
+        <YMAX>4.772883851819679</YMAX>
+      </OPTION>
+      <OPTION type="text" id="FORMULA" name="Formula">sin(g1 * 3.14159 / 180 * 2)</OPTION>
+      <OPTION type="boolean" id="USE_NODATA" name="Use No-Data">false</OPTION>
+      <OPTION type="datatype" id="TYPE" name="Data Type" index="9">4 byte floating point number</OPTION>
+      <INPUT_LIST type="grid_list" id="GRIDS" name="Grids" system="PARAMETERS_GRID_SYSTEM">
+        <INPUT type="grid_list" id="GRIDS" name="Grids" system="PARAMETERS_GRID_SYSTEM">
+          <FILE>C:/Users/Lenovo/AppData/Local/Temp/processing_YVMmQs/d9b8d86d0cf84293b05e6555c2f17556/mdebogotasrtmelevation.sgrd</FILE>
+        </INPUT>
+      </INPUT_LIST>
+      <OUTPUT type="grid" id="RESULT" name="Result">sin(mdebogotasrtmelevation * 3.14159 / 180 * 2)</OUTPUT>
+    </TOOL>
+  </HISTORY>
+  <FILE></FILE>
+  <DESCRIPTION></DESCRIPTION>
+  <PROJECTION>
+    <WKT2>GEODCRS["WGS 84",DATUM["World Geodetic System 1984",ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]],CS[ellipsoidal,2],AXIS["geodetic latitude (Lat)",north,ORDER[1],ANGLEUNIT["degree",0.0174532925199433]],AXIS["geodetic longitude (Lon)",east,ORDER[2],ANGLEUNIT["degree",0.0174532925199433]],ID["EPSG",4326]]</WKT2>
+    <PROJ>+proj=longlat +datum=WGS84 +no_defs +type=crs</PROJ>
+    <CODE authority="EPSG">4326</CODE>
+  </PROJECTION>
+</SAGA_METADATA>

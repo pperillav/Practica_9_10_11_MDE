@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document id="root_doc">
+<Schema name="limite_sabana_bogota" id="limite_sabana_bogota">
+	<SimpleField name="id" type="float"></SimpleField>
+	<SimpleField name="nombre" type="string"></SimpleField>
+</Schema>
+<Folder><name>limite_sabana_bogota</name>
+  <Placemark id="limite_sabana_bogota.1">
+	<Style><LineStyle><color>ff0000ff</color></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>
+	<ExtendedData><SchemaData schemaUrl="#limite_sabana_bogota">
+		<SimpleData name="nombre">Zona de Interés</SimpleData>
+	</SchemaData></ExtendedData>
+      <MultiGeometry><Polygon><outerBoundaryIs><LinearRing><coordinates>-74.2029498055962,4.57592339965165 -74.2016925421987,4.58535287513304 -74.1545451647917,4.57026571436281 -74.1180845262636,4.55140676340002 -74.0715657805554,4.68090489334449 -74.0357337737261,4.69410615901845 -74.0024162936919,4.7041642661986 -73.9540116528874,4.71485100507751 -73.9615552332725,4.49357264711414 -74.208607490885,4.52940465394344 -74.2029498055962,4.57592339965165</coordinates></LinearRing></outerBoundaryIs></Polygon></MultiGeometry>
+  </Placemark>
+</Folder>
+</Document></kml>

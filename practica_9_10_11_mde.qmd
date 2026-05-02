@@ -1,0 +1,772 @@
+---
+title: "Modelos Digitales de Elevación: Fundamentos, Análisis Morfométrico y Automatización de Geoprocesos"
+subtitle: "Reporte Técnico Integrado: Prácticas 9, 10 y 11"
+author: 
+  - name: Oscar Cabrera
+  - name: Pedro Perilla
+  - name: Fernan Severich
+  - name: Bayron Vega
+date: today
+lang: es
+bibliography: referencias.bib
+format:
+  html:
+    embed-resources: true
+    code-fold: false
+    math: true
+    minimal: false
+    toc: true
+    theme: flatly
+    number-sections: true
+  pdf:
+    toc: true
+    number-sections: true
+    colorlinks: true
+execute:
+  freeze: auto
+---
+{{< pagebreak >}}
+
+# Introducción
+
+Los Modelos Digitales de Elevación (MDE) constituyen la base estructural de la geomática moderna y el modelado hidrológico. La representación matemática continua de la topografía permite no solo la visualización del relieve, sino la extracción de parámetros morfométricos y la simulación de procesos físicos sobre la superficie terrestre. En el contexto de la geografía andina colombiana, caracterizada por altas pendientes y transiciones abruptas hacia zonas de planicie (como la Sabana de Bogotá), la precisión algorítmica en la generación y acondicionamiento de estos modelos es un factor crítico.
+
+El presente documento técnico expone un flujo de trabajo exhaustivo que abarca desde la captura de datos altimétricos discretos y la evaluación de métodos de interpolación espacial, hasta la adquisición automatizada de modelos globales (SRTM) mediante computación en la nube. Asimismo, se profundiza en el acondicionamiento hidrológico de las superficies y el cálculo de variables de segundo orden, culminando en la automatización de procesos mediante el Modelador Gráfico de QGIS. Todo el procedimiento se fundamenta en principios de reproducibilidad técnica y análisis crítico de los motores de geoprocesamiento.
+
+La complejidad del relieve andino en el borde oriental de la Sabana de Bogotá impone desafíos únicos. Mientras que la planicie requiere algoritmos que mantengan la horizontalidad sin crear artefactos, los Cerros Orientales exigen métodos que capturen cambios abruptos de pendiente sin suavizar excesivamente las crestas. Este contraste justifica la evaluación multialgorítmica presentada en este reporte
+
+# Objetivos y Alcances
+
+Para dar cumplimiento a los requerimientos técnicos y analíticos de la práctica, se establecen los siguientes objetivos y alcances operativos:
+
+* **Adquisición y Acondicionamiento Topográfico:** Extraer automatizadamente un Modelo Digital de Elevación global (SRTM 30m) a través de la API de Google Earth Engine para el área de estudio, proyectado en MAGNA-SIRGAS Origen Nacional. Posteriormente, ejecutar la corrección topográfica y el relleno de sumideros (*Fill Sinks*) para asegurar la conectividad estricta de la red de drenaje.
+* **Evaluación de Algoritmos de Interpolación:** Analizar críticamente el comportamiento y las limitaciones del algoritmo IDW frente a la variabilidad topográfica andina, proponiendo e implementando métodos geoestadísticos y de curvatura mínima (ej. Multilevel B-Splines) que ofrezcan representaciones más precisas.
+* **Procesamiento Espacial Avanzado:** Derivar y analizar cinco variables morfométricas e hidrológicas complejas sobre el MDE acondicionado (Longitud de Flujo, Acumulación de Flujo, Pendiente Senoidal, TRI y VRM), excluyendo métricas primarias de visualización básica.
+* **Análisis Comparativo de Motores de Geoprocesamiento:** Seleccionar y procesar variables topográficas utilizando plataformas paralelas (SAGA GIS vs. GRASS; GDAL vs. SAGA) para documentar y contrastar las divergencias matemáticas, los artefactos de borde y la eficiencia computacional de cada motor.
+* **Automatización y Reproducibilidad:** Diseñar un modelo ejecutable (*.model3*) en el Modelador Gráfico de QGIS que estandarice la corrección de errores topográficos y la derivación de variables, consolidando todo el flujo de trabajo en un repositorio público de control de versiones.
+
+
+# Requerimientos e Inicialización
+
+El presente documento detalla el flujo de trabajo grupal para la generación y análisis de Modelos Digitales de Elevación (MDE), integrando herramientas SIG de escritorio (QGIS, SAGA y GRASS) con rutinas de procesamiento en la nube mediante Google Earth Engine (GEE).
+
+## Lista de software y recursos
+
+* QGIS. 
+* Plugin de GEE en QGIS [@wu2025qgisgeedata] e Importador de segmentos GPX. 
+* Contenedor (Docker) clase de geomática (Python y sus librerías). 
+* VSCode + Quarto + TinyTex + Extensiones. 
+* Registro de usuario en Google Earth Engine (GEE).
+* Consola Javascript GEE.
+* Google Earth Pro (Escritorio).
+
+## Inicialización del entorno (Python y Javascript)
+
+Autenticación e inicialización de la sesión de GEE interactuando con el proyecto de Google Cloud asignado al grupo.
+
+::: {.panel-tabset}
+
+### Python
+
+```{python}
+#| label: python_init_codigo
+#| eval: false
+#| echo: true
+
+import ee
+import folium
+from IPython.display import display, IFrame
+
+# 1. AUTENTICACIÓN E INICIALIZACIÓN
+ee.Authenticate()
+ee.Initialize(project="ee-pperillav")
+
+print("Google Earth Engine se ha inicializado con éxito para el entorno local.")
+```
+
+### JavaScript
+```{.javascript #js_init}
+// A diferencia de Python, en el Code Editor de GEE la autenticación es automática.
+// Se verifica la conexión al proyecto: ee-pperillav
+print("Google Earth Engine está listo para trabajar en el Code Editor.");
+```
+:::
+
+# Generación de MDE mediante Interpolación
+La creación y personalización cartográfica son componentes estructurales del análisis espacial. Este procedimiento detalla la extracción de puntos de elevación sobre la Sabana de Bogotá para la interpolación de un MDE en QGIS, proyectado al sistema MAGNA-SIRGAS Origen Nacional (EPSG:9377).
+
+## Captura de datos altimétricos
+Se digitalizó un shapefile de polígonos delimitando la zona de estudio, asegurando la inclusión del ecosistema montañoso (Cerros Orientales) y la planicie.
+
+![Creación del Shapefile de Polígonos delimitando la zona de estudio.](images/crear_shapefile_qgis.png){#fig-crear-shapefile fig-align="center" width="80%"}
+
+En Google Earth, se importó el límite geográfico y se trazaron rutas sistemáticas (transectos) para la captura de coordenadas tridimensionales.
+
+![Importación del shapefile de límite de área de estudio en Google Earth.](images/shapefile_in_google_earth.png){#fig-shapefile-ge fig-align="center" width="80%"}
+
+![Trazado de la ruta altimétrica sobre el área de interés.](images/ex-4.1-ge-add-path.png){#fig-ge-add-path fig-align="center" width="60%"}
+
+![Consolidación de la ruta abarcando la totalidad del polígono de estudio.](images/agregar_path_google_earth.png){#fig-ge-new-path fig-align="center" width="90%"}
+
+![Exportación de la ruta vectorial en formato KML.](images/save_path_kml.png){#fig-save-kml fig-align="center" width="80%"}
+
+## Conversión de formatos y asignación de elevación
+Dado que el archivo KML carece de la variable Z densificada, se empleó GPS Visualizer para inyectar altitud basada en el modelo global SRTM, exportando el resultado en formato GPX.
+
+![Interfaz de conversión de archivo KML a formato GPX con asignación de elevación.](images/kml_to_gpx.png){#fig-convert fig-align="center" width="80%"}
+
+## Importación y geoprocesamiento en QGIS
+Mediante el complemento GPX Segment Importer, se integraron las rutas vectoriales al lienzo de QGIS. Posteriormente, se ejecutó el algoritmo Extraer vértices para transformar las líneas en nubes de puntos discretos (puntos_elevacion_bogota.shp).
+
+![Ubicación del complemento GPX Segment Importer en el gestor de plugins de QGIS.](images/ex-4.1-gpx-segmenter.png){#fig-gpx-segmenter fig-align="center" width="80%"}
+
+![Proceso de importación del archivo GPX al entorno de QGIS.](images/import_gpx_qgis.png){#fig-gpx-segmenter-importer fig-align="center" width="80%"}
+
+![Selección de la herramienta Extraer vértices en la caja de geoprocesos.](images/gpx_extract_vertices_qgis.png){#fig-extract-vertices fig-align="center" width="80%"}
+
+![Inspección de la tabla de atributos evidenciando el campo de elevación.](images/atributos_puntos_elevacion.png){#fig-attribute-table fig-align="center" width="80%"}
+
+{{< pagebreak >}}
+
+::: {.callout-important}
+
+Reproyección Crítica a EPSG:9377
+Para garantizar la validez métrica de los algoritmos de interpolación espacial, la capa de puntos fue reproyectada del sistema geográfico WGS84 (EPSG:4326) al sistema proyectado MAGNA-SIRGAS Origen Nacional (EPSG:9377) utilizando la herramienta Reproject layer.
+:::
+
+![Reproyección de la capa de puntos a Magna origen nacional EPSG:9377.](images/reproject_layer.png){#fig-reproject-layer fig-align="center" width="80%"}
+
+# Argumentación Técnica: Evaluación de Algoritmos
+
+Cumpliendo con los requerimientos analíticos de la práctica, el equipo evaluó el comportamiento morfológico de las superficies interpoladas.
+
+## Evaluación del Algoritmo IDW en Geografía Andina
+Se aplicó el método determinístico Ponderación Inversa a la Distancia (IDW). La formulación matemática que rige este interpolador establece que la influencia de un punto de control decae en función de la distancia d y un parámetro de potencia p:
+
+$$Z(x) = \frac{\sum_{i=1}^{n} \frac{Z_i}{d_i^p}}{\sum_{i=1}^{n} \frac{1}{d_i^p}}$$
+​ 
+ 
+![Búsqueda del algoritmo de interpolación IDW en QGIS.](images/idw_geoprocessing_qgis.png){#fig-idw-search fig-align="center" width="50%"}
+
+![Configuración del vector de entrada y atributo base para la interpolación.](images/idw_qgis.png){#fig-idw-tool fig-align="center" width="90%"}
+
+![Parámetros de extensión espacial y definición de la salida raster.](images/idw_qgis_file_name.png){#fig-idw-tool-inputs fig-align="center" width="80%"}
+
+![Vista preliminar del Modelo Digital de Elevación interpolado en escala de grises.](images/resultado_interpolacion.png){#fig-dem fig-align="center" width="80%"}
+
+![Configuración de renderizado de pseudocolor monobanda.](images/ex-4.1-dem-pseudo-colors.png){#fig-dem-pseudo-colors fig-align="center" width="80%"}
+
+![Asignación de escala hipsométrica desde las paletas topográficas estándar.](images/ex-4.1-dem-pseudo-colors-palette.png){#fig-dem-pseudo-colors-palette fig-align="center" width="80%"}
+
+
+**Diagnóstico de Artefactos (Efecto "Ojo de Buey"):**
+
+La inspección visual del MDE generado revela inconsistencias topográficas severas en la geografía andina evaluada. Se observa la formación de patrones circulares concéntricos (bull's-eye effect) que invalidan el modelo morfológico, tal como se aprecia en la @fig-final-map.
+
+Esto ocurre por dos factores detectados por el equipo:
+
+Muestreo espacial sesgado: La captura se concentró en la zona montañosa, omitiendo la planicie central. Al no existir puntos de control en el occidente, el algoritmo alcanza su límite de búsqueda, interpolando áreas artificialmente planas.
+
+Limitaciones del IDW: Al ser un interpolador exacto, asume una caída abrupta de la elevación. Con una potencia p=2, se impide la generación de una superficie continua entre transectos, forzando picos locales sobre cada coordenada capturada.
+
+![Composición cartográfica finalizada y exportada del Modelo Digital de Elevación (Efecto Ojo de Buey).](images/mapa_dem.png){#fig-final-map fig-align="center" width="90%"}
+
+Se resalta el efecto de ojo de buey debido a la baja densidad de puntos en la planicie
+
+![Interfaz de configuración de la herramienta Mapa de sombras en QGIS.](images/ex-4.1-hillshade.png){#fig-hillshade-search fig-align="center" width="80%"}
+
+![Parámetros de la herramienta Mapa de sombras en QGIS.](images/hillshade_qgis.png){#fig-hillshade-params fig-align="center" width="80%"}
+
+
+## Discusión Técnica: Criterios para la Selección del Método de Interpolación Óptimo
+
+La selección de un interpolador no es solo una cuestión de preferencia de software, sino una decisión estadística basada en la naturaleza de los datos. Mientras que el IDW es un método de 'fuerza bruta' que ignora la tendencia regional, métodos como Kriging o Multilevel B-Splines consideran la continuidad del paisaje, resultando en modelos hidrológicamente más coherentes
+
+En la geomática aplicada y el modelado espacial, la elección del algoritmo no debe ser arbitraria, sino que debe responder a la densidad del muestreo, la variabilidad topográfica y la finalidad del modelo (hidrológica, morfológica o de análisis continuo) [@burrough2015principles]. A continuación, se evalúan los métodos que, bajo estándares académicos, representan las mejores prácticas para la generación de MDE a partir de muestras puntuales.
+
+### Métodos Geoestadísticos: Kriging Ordinario
+A diferencia de los métodos determinísticos (IDW o Splines), el Kriging es un método estocástico basado en la teoría de variables regionalizadas [@isaaks1989applied]. Es ampliamente considerado el **interpolador óptimo** en ciencias de la Tierra por su capacidad de modelar la autocorrelación espacial a través del semivariograma.
+
+* **Ventaja Crítica:** Proporciona un mapa de la varianza del error (incertidumbre), permitiendo identificar zonas donde el modelo es menos confiable debido a la escasez de datos.
+* **Aplicación:** Ideal cuando existe una estructura espacial definida en el relieve y se requiere cuantificar el riesgo de error en las predicciones.
+
+::: {.callout-tip}
+## El Rol del Semivariograma
+Para un análisis riguroso, es imperativo realizar el ajuste del semivariograma empírico a un modelo teórico (Esférico, Exponencial o Gaussiano). Esto permite capturar el "nugget" (error de medición), el "sill" (varianza total) y el "range" (distancia máxima de correlación), elementos matemáticos que los métodos determinísticos ignoran por completo.
+:::
+
+### Métodos de Curvatura Mínima: Thin Plate Splines (TPS)
+Mientras que los B-Splines (utilizados en SAGA) son excelentes para suavizar a nivel global, los *Thin Plate Splines* actúan como una placa elástica que se dobla para pasar exactamente por los puntos de control [@mitasova1999spatial].
+
+* **Comportamiento:** Es muy superior al IDW en terrenos escarpados porque evita los artefactos circulares y mantiene una continuidad de segundo orden en las derivadas (pendiente y curvatura), lo cual es vital para extraer redes de drenaje o calcular cuencas visuales.
+
+::: {.callout-warning}
+## El Problema del "Overshooting"
+Los métodos Spline pueden presentar oscilaciones artificiales (valores de elevación exageradamente altos o bajos respecto a los datos reales) en zonas con cambios bruscos de relieve o muy baja densidad de puntos. Siempre se debe validar que los valores extremos del ráster resultante sean coherentes con la realidad física del terreno.
+:::
+
+### ANUDEM (Topo to Raster)
+Desarrollado originalmente por Hutchinson [@hutchinson1989new], este algoritmo está diseñado específicamente para la correcta representación de las condiciones de flujo superficial.
+
+* **Diferenciador:** Es un método de interpolación iterativa que impone restricciones de continuidad en el drenaje. Resulta ser el mejor método cuando se cuenta con curvas de nivel e información de hidrografía (ríos y lagos) simultáneamente, ya que fuerza físicamente a que los valles coincidan con las líneas de flujo de agua.
+
+### Cuadro Comparativo de Selección
+
+| Método | Tipo | Complejidad | Aplicación Principal |
+| :--- | :--- | :--- | :--- |
+| **IDW** | Determinístico Local | Baja | Visualización rápida de redes de datos muy densas en topografías llanas. |
+| **B-Splines** | Determinístico Global | Media | Generación de superficies continuas y naturales para modelado regional. |
+| **Kriging** | Estocástico | Alta | Modelado de superficies con alta variabilidad donde es crítico conocer la incertidumbre. |
+| **ANUDEM** | Híbrido | Alta | Modelos de elevación rigurosos destinados estrictamente al análisis hidrológico. |
+
+::: {.callout-note}
+## Validación Cruzada (Cross-Validation)
+Independientemente del método elegido, la robustez de un MDE exige una **Validación Cruzada**. Se recomienda omitir aleatoriamente un porcentaje de la muestra (ej. 10%) durante la interpolación para luego comparar su valor real medido contra el valor predicho por el modelo, calculando así la Raíz del Error Cuadrático Medio (RMSE). Un RMSE bajo valida estadísticamente la superficie generada.
+:::
+
+## Propuesta Alternativa: Multilevel B-Splines (SAGA GIS)
+Para construir un MDE riguroso frente a distribuciones irregulares de datos altimétricos, el equipo propone la implementación del algoritmo Multilevel B-Splines a través de SAGA GIS.
+
+![Carga de Shapefiles en SAGA.](images/carga_shapefiles_saga.png){#fig-carga-shapefiles fig-align="center" width="60%"}
+
+![Localización de herramienta Multilevel B-Spline en SAGA.](images/saga_multilevel_bspline_tool.png){#fig-herramienta-bspline fig-align="center" width="60%"}
+
+![Opciones de la herramienta Multilevel B-Spline en SAGA.](images/saga_bspline_options.png){#fig-saga-options fig-align="center" width="80%"}
+
+![Exportar el GeoTiff generado por Multilevel B-Spline.](images/saga_save_as_image.png){#fig-exportar-geotif fig-align="center" width="80%"}
+
+A diferencia del IDW, esta técnica spline (Target Grid System: user defined, Fit: nodes) minimiza la varianza local de la superficie, actuando como una "lámina flexible" que se ajusta a los puntos de control sin generar mesetas artificiales.
+
+Ventaja principal: Genera una transición altitudinal suavizada, extrapolando de manera matemática y lógica las tendencias del relieve andino hacia las áreas con vacíos de información en la Sabana.
+
+![Mapa de sombras a partir del MDE generado en SAGA con la herramienta Multilevel B-Spline.](images/hillshade_bspline.png){#fig-hillshade-bspline fig-align="center" width="80%"}
+
+![Salida cartográfica mejorada usando productos de SAGA.](images/mapa_dem_hillshade_saga.png){#fig-mapa-final-bspline fig-align="center" width="90%"}
+
+{{< pagebreak >}}
+
+# Automatización de Productos Topográficos (GEE + Python)
+Tras evaluar los métodos de interpolación local, se procedió a contrastar estos resultados con modelos de elevación globales obtenidos mediante computación en la nube.
+
+Como validación cruzada y para aplicar principios de reproducibilidad técnica, se programó una rutina nativa en Python para extraer el Modelo Digital SRTM directamente desde los clústeres de Google Earth Engine a la carpeta de trabajo data/.
+
+## Descarga del MDE (SRTMGL1)
+Fragmento de código:
+```python
+#| label: python_srtm_gee
+#| eval: false
+#| echo: true
+
+import ee
+import os
+import urllib.request
+import zipfile
+
+ee.Initialize()
+srtm = ee.Image("USGS/SRTMGL1_003")
+roi_bogota = ee.Geometry.Point([-74.084, 4.638]).buffer(15000).bounds()
+
+# Configuración del directorio de datos actualizado a data/
+directorio_salida = "data"
+os.makedirs(directorio_salida, exist_ok=True)
+ruta_zip = os.path.join(directorio_salida, "mde_bogota_temp.zip")
+
+# Petición a la API para comprimir recorte a 30m
+url_descarga = srtm.getDownloadURL({
+    'name': 'mde_bogota_srtm', 
+    'scale': 30,
+    'crs': 'EPSG:4326',
+    'region': roi_bogota
+})
+
+urllib.request.urlretrieve(url_descarga, ruta_zip)
+
+with zipfile.ZipFile(ruta_zip, 'r') as zip_ref:
+    nombre_original_ee = zip_ref.namelist()[0]
+    zip_ref.extractall(directorio_salida)
+
+# Renombrado de estandarización en data/
+ruta_antigua = os.path.join(directorio_salida, nombre_original_ee)
+ruta_nueva = os.path.join(directorio_salida, "mde_bogota_srtm_elevation.tif")
+os.rename(ruta_antigua, ruta_nueva)
+os.remove(ruta_zip)
+
+print("Descarga nativa SRTM finalizada y estandarizada en la carpeta data/")
+```
+**Evidencia de ejecución en el entorno Docker:**
+![Ejecución exitosa del script de descarga en la terminal de VSCode y creación del directorio de datos.](images/evidencia_descarga_python.png){#fig-evidencia-descarga fig-align="center" width="90%"}
+
+## Reproyección y Generación de Derivados (GDAL)
+Mediante la librería Geoespacial osgeo.gdal, el equipo procesó el MDE para generar productos analíticos derivados (Pendiente, Orientación y Relieve Sombreado).
+
+Fragmento de código:
+```python
+#| label: python_gdal_hillshade
+#| eval: false
+#| echo: true
+
+from osgeo import gdal
+import rasterio
+from rasterio.plot import show
+import matplotlib.pyplot as plt
+
+# Uso del nuevo directorio data/
+ruta_mde_4326 = "data/mde_bogota_srtm_elevation.tif"
+ruta_mde_9377 = "data/mde_bogota_9377_py.tif"
+
+# 1. Reproyección Origen Nacional
+ds_warp = gdal.Warp(ruta_mde_9377, ruta_mde_4326, dstSRS="EPSG:9377")
+ds_warp = None # Cierre de puntero C++
+
+# 2. Generación de Derivados Topográficos
+ruta_pendiente = "data/mde_bogota_slope_py.tif"
+ruta_orientacion = "data/mde_bogota_aspect_py.tif"
+ruta_sombreado = "data/mde_bogota_hillshade_py.tif"
+
+ds_slope = gdal.DEMProcessing(ruta_pendiente, ruta_mde_9377, "slope")
+ds_slope = None
+ds_aspect = gdal.DEMProcessing(ruta_orientacion, ruta_mde_9377, "aspect")
+ds_aspect = None
+ds_hill = gdal.DEMProcessing(ruta_sombreado, ruta_mde_9377, "hillshade", 
+azimuth=315, altitude=45)
+ds_hill = None
+
+# 3. Renderizado Python
+with rasterio.open(ruta_mde_9377) as mde_src, rasterio.open(ruta_sombreado) as hill_src:
+    fig, ax = plt.subplots(figsize=(10, 10))
+    show(hill_src, ax=ax, cmap='Greys_r')
+    show(mde_src, ax=ax, cmap='terrain', alpha=0.4)
+    ax.set_title("Relieve sombreado y elevación SRTM (API GEE / Python GDAL)")
+    ax.set_axis_off() 
+    plt.show()
+```
+
+**Evidencia de renderizado con Matplotlib/Rasterio:**
+![Visualización del modelo de sombras y elevación generado estrictamente mediante Python y GDAL.](images/evidencia_mapa_python.png){#fig-evidencia-mapa-py fig-align="center" width="80%"}
+
+# Procesamiento hidrológico y morfométrico de modelos digitales de elevación
+
+El Modelo Digital de Elevación (MDE) constituye el insumo fundamental para el análisis geomorfológico e hidrológico de cuencas hidrográficas, debido a que representa de manera continua la variación altimétrica de la superficie terrestre. A partir de este modelo es posible derivar variables topográficas, simular procesos de escorrentía superficial y caracterizar el comportamiento espacial del relieve.
+
+En cuencas andinas colombianas, la calidad y consistencia topológica del MDE condicionan directamente la precisión de los análisis hidrológicos y geomorfológicos, particularmente en estudios relacionados con erosión, concentración de flujo, delimitación de drenajes, susceptibilidad a inundaciones y dinámica superficial del agua. En consecuencia, previo al análisis hidrológico, es necesario realizar un acondicionamiento topográfico que garantice la continuidad hidráulica del modelo y elimine inconsistencias geométricas presentes en los datos originales.
+
+El presente capítulo describe los procedimientos técnicos y geoprocesos implementados para el acondicionamiento hidrológico y el análisis morfométrico del terreno, aplicados sobre un área de estudio localizada en la Sabana de Bogotá. El procesamiento se desarrolló exclusivamente mediante herramientas del motor SAGA GIS integradas en QGIS, empleando algoritmos especializados para el cálculo de variables topográficas derivadas y parámetros morfométricos del relieve.
+
+Entre los productos generados se incluyen modelos de pendiente, curvatura, rugosidad, acumulación de flujo, longitud de flujo e insolación, los cuales permiten interpretar el comportamiento geomorfológico e hidrológico de la cuenca. 
+
+## Corrección de depresiones y sumideros
+
+El acondicionamiento hidrológico es una etapa esencial en la preparación de Modelos Digitales de Elevación (MDE), debido a que los datos originales pueden contener depresiones artificiales o sumideros que interrumpen la continuidad del flujo superficial y afectan los análisis hidrológicos.
+
+Para corregir estas inconsistencias, se empleó la herramienta Fill Sinks de SAGA GIS, la cual eleva de manera iterativa las celdas con depresiones hasta permitir el drenaje hacia una celda vecina aguas abajo (pour point). Como resultado, se obtiene un MDE corregido o Depressionless DEM, indispensable para la ejecución de algoritmos de dirección y acumulación de flujo.
+
+Este procedimiento garantiza la conectividad hidráulica del modelo y mejora la precisión de los análisis geomorfológicos e hidrológicos posteriores.
+
+![Corrección de depresiones y sumideros mediante Fill Sinks (Wang & Liu).](data_hidro/fill_sinks_wang_liu.png){#fig-fill-sinks fig-align="center" width="90%"}
+
+## Pendiente
+
+La pendiente corresponde al ángulo de inclinación de la superficie del terreno respecto a la horizontal y constituye una de las variables geomorfométricas más importantes derivadas del Modelo Digital de Elevación (MDE). Esta variable cuantitativa continua permite evaluar la energía del relieve, el comportamiento del escurrimiento superficial y la susceptibilidad a procesos erosivos y movimientos en masa.
+
+El cálculo de la pendiente se realizó a partir del MDE previamente acondicionado hidrológicamente, empleando la herramienta Slope, Aspect, Curvature del motor SAGA GIS en QGIS. Este módulo permite obtener de manera integrada parámetros de primer orden, como pendiente y orientación, así como derivadas de segundo orden relacionadas con la curvatura del terreno, garantizando consistencia matemática y eficiencia computacional durante el procesamiento.
+
+Para el análisis se utilizó el método de Zevenbergen & Thorne, el cual genera superficies más suaves y continuas, adecuadas para estudios geomorfológicos e hidrológicos.
+
+![Cálculo de pendiente mediante Slope (Zevenbergen & Thorne).](data_hidro/slope_aspect_curvature.png){#fig-slope fig-align="center" width="90%"}
+
+## Pendiente senoidal
+
+La pendiente senoidal corresponde a una transformación trigonométrica de la pendiente topográfica, calculada como el seno del doble del ángulo de pendiente. Esta variable cuantitativa continua se deriva del Modelo Digital de Elevación (MDE) y se emplea en análisis geomorfológicos e hidrológicos relacionados con la distribución de energía del relieve y el comportamiento del flujo superficial.
+
+La relación matemática utilizada es:
+
+$$
+S_{sen} = \sin(2\theta)
+$$
+
+Donde $\theta$ representa la pendiente en radianes. Debido a que los algoritmos de cálculo de pendiente generan resultados en grados decimales, fue necesario realizar previamente la conversión a radianes dentro de la expresión trigonométrica.
+
+El cálculo se realizó mediante la herramienta **Raster Calculator** de SAGA GIS en QGIS, utilizando la capa de pendiente obtenida previamente.
+
+![Cálculo de pendiente senoidal mediante Raster Calculator.](data_hidro/Raster_calculator.png){#fig-raster-calculator fig-align="center" width="90%"}
+
+## Insolación- Sombreado Analítico (Hillshade)
+
+La insolación corresponde al coeficiente de iluminación o intensidad reflejada de la superficie terrestre, derivado a partir del Modelo Digital de Elevación (MDE). Esta variable representa la incidencia teórica de la luz sobre el relieve y se expresa en un rango de valores entre 0 y 255, donde 0 corresponde a zonas de sombra total y 255 representa la máxima iluminación.
+
+El producto generado, conocido técnicamente como hillshade o sombreado analítico, permite resaltar las formas del relieve, identificar drenajes, laderas y geoformas, además de facilitar la interpretación geomorfológica de la superficie terrestre.
+
+El cálculo se realizó mediante la herramienta Analytical Hillshading del motor SAGA GIS en QGIS, utilizando el modelo de reflexión de Lambert para obtener un coeficiente de intensidad lumínica estándar.
+
+![Cálculo de insolación mediante Analytical Hillshading.](data_hidro/analytical_hillshading.png){#fig-hillshade fig-align="center" width="90%"}
+
+## Medida de rugosidad vectorial (VRM)
+
+La Medida de Rugosidad Vectorial (*Vector Ruggedness Measure – VRM*) corresponde a un índice que cuantifica la dispersión de los vectores normales a la superficie dentro de una vecindad de celdas del Modelo Digital de Elevación (MDE). Esta variable cuantitativa continua permite evaluar el grado de heterogeneidad y accidentabilidad del terreno.
+
+El VRM se calcula mediante la siguiente expresión:
+
+$$
+VRM = 1 - \frac{|\vec{R}|}{n}
+$$
+
+Donde $|\vec{R}|$ representa la magnitud del vector resultante y $n$ corresponde al número de celdas consideradas en la vecindad de análisis.
+
+Los valores obtenidos oscilan entre 0 y 1, donde valores cercanos a 0 representan superficies lisas o uniformes, mientras que valores próximos a 1 indican terrenos altamente rugosos y con elevada variabilidad topográfica.
+
+El cálculo se realizó mediante la herramienta **Vector Ruggedness Measure (VRM)** del motor SAGA GIS en QGIS, la cual permite cuantificar la dispersión espacial de las orientaciones del relieve y caracterizar la complejidad geomorfológica del terreno.
+
+![Cálculo de Medida de rugosidad vectorial mediante Vector Ruggedness Measure.](data_hidro/vector_ruggednee_measure.png){#fig-vrm fig-align="center" width="90%"}
+
+## Índice de rugosidad terrestre (TRI)
+
+El Índice de Rugosidad Terrestre (*Terrain Ruggedness Index – TRI*), propuesto por Riley et al. (1999), cuantifica la heterogeneidad topográfica mediante la variación de elevación entre una celda central y sus celdas vecinas. A diferencia del VRM, el TRI evalúa específicamente la variabilidad altimétrica vertical del terreno.
+
+La expresión matemática del TRI es:
+
+$$
+TRI = \sqrt{\sum_{i=1}^{8}(Z_i - Z_0)^2}
+$$
+
+Donde $Z_0$ corresponde a la elevación de la celda central y $Z_i$ representa la elevación de cada una de las ocho celdas vecinas.
+
+Los valores bajos del índice representan superficies planas o uniformes, mientras que valores altos indican terrenos accidentados y con fuertes variaciones topográficas.
+
+El cálculo se realizó mediante la herramienta **Terrain Ruggedness Index (TRI)** del motor SAGA GIS en QGIS, la cual permite identificar microvariaciones del relieve y caracterizar la complejidad geomorfológica de la superficie terrestre.
+
+![Cálculo del índice de rugosidad terrestre mediante Terrain Ruggedness Index.](data_hidro/TRI.png){#fig-tri fig-align="center" width="90%"}
+
+## Acumulación de flujo
+
+La acumulación de flujo corresponde al área aportante aguas arriba de una celda determinada y representa la sumatoria de las superficies que drenan hacia dicho punto. Esta variable permite identificar zonas de concentración de escorrentía y delimitar patrones de drenaje superficial dentro de la cuenca hidrográfica.
+
+Para su cálculo es necesario determinar previamente la dirección de flujo, la cual define la trayectoria del escurrimiento desde cada celda hacia la celda vecina de menor elevación, siguiendo el modelo hidrológico D8.
+
+El procesamiento se realizó mediante la herramienta **Flow Accumulation (Top-Down)** del motor SAGA GIS en QGIS, la cual integra internamente el cálculo de dirección de flujo y acumulación superficial a partir del Modelo Digital de Elevación acondicionado hidrológicamente.
+
+Los valores altos de acumulación representan cauces principales y sectores de concentración de flujo, mientras que los valores bajos corresponden a divisorias y zonas altas del relieve.
+
+![Cálculo de la acumulación de flujo mediante Flow Accumulation (Top-Down).](data_hidro/flow_accumulation.png){#fig-flow fig-align="center" width="90%"}
+
+## Longitud de flujo
+
+La longitud de flujo corresponde a la distancia máxima recorrida por el escurrimiento superficial aguas arriba de una celda determinada, medida sobre la superficie real del terreno y no sobre su proyección horizontal. Debido a ello, el cálculo incorpora la pendiente topográfica para representar de manera más precisa la trayectoria del flujo.
+
+La relación utilizada es:
+
+$$
+L = \frac{L_n}{\cos(\theta)}
+$$
+
+Donde $L$ corresponde a la longitud real de flujo, $L_n$ representa la distancia horizontal y $\theta$ es el ángulo de pendiente del terreno.
+
+El cálculo se realizó mediante la herramienta **Flow Path Length** del motor SAGA GIS en QGIS, la cual permite estimar las trayectorias máximas de flujo superficial y analizar la conectividad hidrológica dentro de la cuenca.
+
+Los valores altos de longitud de flujo se asocian a trayectorias hidráulicas extensas y sectores con mayor potencial de concentración de escorrentía.
+
+![Cálculo de la longitud de flujo mediante Flow Path Length.](data_hidro/Flow_Path_Length.png){#fig-flow-path fig-align="center" width="90%"}
+
+
+## Análisis Comparativo de Algoritmos
+Un error común en la geomática es asumir que diferentes motores de software producen resultados idénticos para el mismo algoritmo. La siguiente comparativa demuestra cómo las sutiles diferencias en la implementación de las librerías GDAL, SAGA y GRASS pueden alterar significativamente la delimitación de una red de drenaje o la interpretación de la rugosidad del terreno.
+
+Para evaluar la divergencia algorítmica entre motores espaciales, se procesaron dos variables utilizando plataformas paralelas.
+
+### Acumulación de Flujo: SAGA GIS vs. GRASS (r.watershed)
+Al ejecutar la acumulación de flujo, se evidenció una discrepancia sustancial en la topología de la red hídrica extraída, influenciada fuertemente por el cambio de pendiente entre la montaña y la zona plana:
+
+* **SAGA GIS (D8 - Top Down):** El algoritmo D8 direcciona el flujo hacia una única celda vecina (la de máxima pendiente). En la topografía de la Sabana de Bogotá, este enfoque unidireccional logró delinear redes hídricas mucho más definidas y congruentes con el relieve real, concentrando el escurrimiento de manera precisa.
+* **GRASS (r.watershed):** Emplea un enfoque de enrutamiento múltiple (Multiple Flow Direction - MFD), dividiendo el flujo proporcionalmente entre varias celdas inferiores. Si bien teóricamente es robusto, al aplicarse sobre la planicie de la Sabana generó una dispersión excesiva, resultando en amplias zonas de acumulación irreales o "manchas" que no corresponden a la dinámica de drenaje canalizado del área.
+* **Conclusión:** Para el modelado hidrológico en la topografía bogotana, el algoritmo D8 de SAGA demostró ser superior. Proporciona una representación mucho más realista y acorde a la red de drenaje físico, evitando la sobresaturación y dispersión artificial que produce el enfoque MFD de GRASS en terrenos de baja pendiente.
+
+![Comparativa visual de la red de acumulación: Algoritmo D8 (SAGA) frente al enrutamiento múltiple (GRASS) en la Sabana de Bogotá.](images/comparativa_acumulacion.png){#fig-comp-accum fig-align="center" width="85%"}
+
+### Índice de Rugosidad Terrestre (TRI): SAGA GIS vs. QGIS Nativo (GDAL)
+El cálculo del TRI para detectar micro-escarpes presentó diferencias de rendimiento, manejo de bordes y contraste visual:
+
+* **Eficiencia Computacional:** La herramienta nativa de QGIS (basada en la librería GDAL en C++) ejecutó la matriz de focalización significativamente más rápido que el proveedor de SAGA NextGen.
+* **Manejo de Bordes (NoData):** El algoritmo de SAGA tiende a expandir el efecto de borde introduciendo artefactos en los límites del polígono, mientras que GDAL maneja los valores nulos (NoData) de manera más estricta, limitando el cálculo a la grilla válida.
+* **Contraste Morfométrico:** Como se evidencia en la figura comparativa, el resultado procesado mediante GDAL resalta de manera mucho más evidente y definida las zonas de alta rugosidad, facilitando la identificación visual de los micro-escarpes frente a los resultados de SAGA.
+
+![Detalle de las variaciones de intensidad en el Índice de Rugosidad Terrestre (TRI) entre GDAL y SAGA.](images/comparativa_tri.png){#fig-comp-tri fig-align="center" width="85%"}
+
+# Automatización de Geoprocesos: Modelador Gráfico de QGIS
+
+Inicialmente se utiliza el código “QGIS (GRASS)”, se introduce el comando `r.fill.dir`. Se verifica un modelo, el cual resulta válido para el ejercicio.
+
+![Configuración inicial del modelo en el Modelador Gráfico.](images/modelo_figura_1.png){#fig-modelo1 fig-align="center" width="90%"}
+
+![Ejecución del comando r.fill.dir.](images/modelo_figura_2.png){#fig-modelo2 fig-align="center" width="90%"}
+
+Dentro del primer cálculo del modelo se obtiene el siguiente registro de ejecución:
+
+```default
+
+Versión de QGIS: 3.44.6-Solothurn
+Revisión del código de QGIS: fb066c58058
+Python version: 3.12.12
+Versión de GDAL: 3.12.1
+El algoritmo comenzó en: 2026-04-27T22:26:09
+Algoritmo 'modelo' comenzando…
+
+Parámetros de entrada:
+{ 'asp' : 'TEMPORARY_OUTPUT', 'dem_crudo' : 'C:/Users/LAPTOP/OneDrive/Documentos/
+CAPAS HIDRO GEOMATICA GENERAL/data_hidro/Terrain Ruggedness Index (TRI).sdat', 
+'dem_fill' : 'TEMPORARY_OUTPUT', 'pen' : 'TEMPORARY_OUTPUT' }
+
+Preparar algoritmo: grass:r.slope.aspect_2
+Ejecutando r.slope.aspect [1/5]
+...
+[Registros de procesamiento de GRASS y GDAL]
+...
+Modelo procesado correctamente. Se ejecutaron 5 algoritmos en total en 3.138 s.
+Ejecución completada en 3.15 segundos
+
+Results:
+  asp: C:\Users\LAPTOP\AppData\Local\Temp\...\aspect.tif
+  pen: C:\Users\LAPTOP\AppData\Local\Temp\...\slope.tif
+  dem_fill: C:/Users/LAPTOP/AppData/Local/Temp/...\OUTPUT_FILLED_DEM.tif
+```
+
+Ahora, realizando los ajustes pertinentes, se corrigieron los errores anteriores cambiando a herramientas nativas para mejorar el rendimiento. Se obtiene que:
+
+```default
+
+El algoritmo comenzó en: 2026-04-27T22:35:23
+Algoritmo 'modelo' comenzando…
+
+Preparar algoritmo: native:slope_1
+Ejecutando Pendiente [1/3]
+...
+Preparar algoritmo: native:fillsinkswangliu_1
+Ejecutando Fill sinks (Wang & Liu) [2/3]
+...
+Preparar algoritmo: gdal:triterrainruggednessindex_1
+Ejecutando Índice de irregularidad del terreno (TRI) [3/3]
+...
+Modelo procesado correctamente. Se ejecutaron 3 algoritmos en total en 0.794 s.
+Ejecución completada en 0.81 segundos
+```
+
+Así mismo, el modelo se optimizó de 4.5 segundos a solo 0.81 segundos.
+
+Finalmente, ajustando el resultado del TRI Final que no se estaba visualizando (solo se mostraba la ventana final de aspecto y pendiente), se ejecuta la iteración definitiva del modelo:
+
+```default
+
+El algoritmo comenzó en: 2026-04-27T22:47:11
+Algoritmo 'modelo' comenzando…
+
+Preparar algoritmo: native:fillsinkswangliu_1
+Ejecutando Fill sinks (Wang & Liu) [1/4]
+...
+Preparar algoritmo: gdal:triterrainruggednessindex_1
+Ejecutando Índice de irregularidad del terreno (TRI) [2/4]
+...
+Preparar algoritmo: native:slope_1
+Ejecutando Pendiente [3/4]
+...
+Preparar algoritmo: native:aspect_1
+Ejecutando Aspecto [4/4]
+...
+Modelo procesado correctamente. Se ejecutaron 4 algoritmos en total en 0.883 s.
+Ejecución completada en 0.89 segundos
+
+Results:
+  tri_final: C:/Users/LAPTOP/.../OUTPUT.tif
+  aspecto_final: C:/Users/LAPTOP/.../OUTPUT.tif
+  dem_fill: C:/Users/LAPTOP/.../OUTPUT_FILLED_DEM.tif
+  pendiente_final: C:/Users/LAPTOP/.../OUTPUT.tif
+
+```
+
+## Modelo final Implementado
+
+![Flujo de trabajo optimizado del modelo final en QGIS.](images/modelo_figura_3.png){#fig-modelo3 fig-align="center" width="90%"}
+
+Finalmente se obtiene que:
+
+Fill Sinks: El algoritmo, ajustado en cada paso, rellenó pequeños huecos o errores en los datos (píxeles hundidos). Aplicación en la Hidrología de la Cuenca delimitada cerca a los cerros de Bogotá: Si se requiere calcular por dónde fluye el agua o delimitar cuencas, se necesita este mapa; de lo contrario, el agua digital se quedaría atrapada en esos huecos falsos. Esto debido a que inicialmente se trazó una ruta o polígono amplio, y al no tener curvas tan continuas se obtienen inconsistencias en el modelo final.
+
+Pendiente Final: Es crucial para analizar riesgos de deslizamientos de tierra, planificar el trazado de carreteras o evaluar la velocidad a la que fluirá el agua.
+
+Aspecto Final: Resulta en un mapa que indica hacia qué punto cardinal está "mirando" la ladera de una montaña, lo cual es importante al momento de definir sombras o cantidad de luz solar.
+
+TRI Final (Terrain Ruggedness Index): Es un mapa que mide qué tan "quebrado", accidentado o rugoso es el terreno, cuantificando la diferencia de altura entre un píxel y sus vecinos.
+
+Finalmente, esto se agrega a las capas existentes del modelo trabajado, tal como se ve en la siguiente figura en escala de grises.
+
+![Integración de las variables en las capas del proyecto.](images/modelo_figura_4.png){#fig-modelo4 fig-align="center" width="90%"}
+
+Código Python Exportado
+Al exportar el modelo gráfico final, se obtiene el siguiente script en Python ejecutable desde la consola de QGIS:
+
+```python
+"""
+Model exported as python.
+Name : modelo
+With QGIS : 34406
+"""
+
+from typing import Any, Optional
+from qgis.core import QgsProcessing
+from qgis.core import QgsProcessingAlgorithm
+from qgis.core import QgsProcessingContext
+from qgis.core import QgsProcessingFeedback, QgsProcessingMultiStepFeedback
+from qgis.core import QgsProcessingParameterRasterLayer
+from qgis.core import QgsProcessingParameterRasterDestination
+from qgis import processing
+
+class Modelo(QgsProcessingAlgorithm):
+
+    def initAlgorithm(self, config: Optional[dict[str, Any]] = None):
+        # Modelo Digital de Elevacion
+        self.addParameter(QgsProcessingParameterRasterLayer('dem_crudo', 
+        'DEM CRUDO', defaultValue=None))
+        self.addParameter(QgsProcessingParameterRasterDestination('TriFinal', 
+        'TRI FINAL', createByDefault=True, defaultValue='C:/Users/LAPTOP/OneDrive/
+        Documentos/CAPAS HIDRO GEOMATICA GENERAL/Proyecto Geomatica/TRI DATOS/
+        DATOS TRI.tif'))
+        self.addParameter(QgsProcessingParameterRasterDestination('AspectoFinal',
+        'Aspecto Final', createByDefault=True, defaultValue='C:/Users/LAPTOP/OneDrive
+        /Documentos/CAPAS HIDRO GEOMATICA GENERAL/Proyecto Geomatica/Aspecto/Aspecto.tif'))
+        self.addParameter(QgsProcessingParameterRasterDestination('Dem_fill',
+        'DEM_fill', optional=True, createByDefault=True, defaultValue='C:/Users/
+        LAPTOP/OneDrive/Documentos/CAPAS HIDRO GEOMATICA GENERAL/Proyecto Geomatica/
+        Datos DEM FILL/Datos Dem Fill.tif'))
+        self.addParameter(QgsProcessingParameterRasterDestination('PendienteFinal',
+        'Pendiente Final', createByDefault=True, defaultValue='C:/Users/LAPTOP/
+        OneDrive/Documentos/CAPAS HIDRO GEOMATICA GENERAL/Proyecto Geomatica/
+        Pendiente/Pendiente.tif'))
+
+    def processAlgorithm(self, parameters: dict[str, Any], context: QgsProcessingContext,
+     model_feedback: QgsProcessingFeedback) -> dict[str, Any]:
+        feedback = QgsProcessingMultiStepFeedback(4, model_feedback)
+        results = {}
+        outputs = {}
+
+        # Fill sinks (Wang & Liu)
+        alg_params = {
+            'BAND': 1,
+            'CREATION_OPTIONS': None,
+            'INPUT': parameters['dem_crudo'],
+            'MIN_SLOPE': 0.01,
+            'OUTPUT_FILLED_DEM': parameters['Dem_fill']
+        }
+        outputs['FillSinksWangLiu'] = processing.run('native:fillsinkswangliu',
+         alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        results['Dem_fill'] = outputs['FillSinksWangLiu']['OUTPUT_FILLED_DEM']
+
+        feedback.setCurrentStep(1)
+        if feedback.isCanceled():
+            return {}
+
+        # Índice de irregularidad del terreno (TRI)
+        alg_params = {
+            'BAND': 1,
+            'COMPUTE_EDGES': False,
+            'CREATION_OPTIONS': None,
+            'INPUT': outputs['FillSinksWangLiu']['OUTPUT_FILLED_DEM'],
+            'OUTPUT': parameters['TriFinal']
+        }
+        outputs['NdiceDeIrregularidadDelTerrenoTri'] = processing.run
+        ('gdal:triterrainruggednessindex', alg_params, context=context,
+         feedback=feedback, is_child_algorithm=True)
+        results['TriFinal'] = outputs['NdiceDeIrregularidadDelTerrenoTri']['OUTPUT']
+
+        feedback.setCurrentStep(2)
+        if feedback.isCanceled():
+            return {}
+
+        # Pendiente
+        alg_params = {
+            'INPUT': outputs['FillSinksWangLiu']['OUTPUT_FILLED_DEM'],
+            'Z_FACTOR': 1,
+            'OUTPUT': parameters['PendienteFinal']
+        }
+        outputs['Pendiente'] = processing.run('native:slope', alg_params,
+         context=context, feedback=feedback, is_child_algorithm=True)
+        results['PendienteFinal'] = outputs['Pendiente']['OUTPUT']
+
+        feedback.setCurrentStep(3)
+        if feedback.isCanceled():
+            return {}
+
+        # Aspecto
+        alg_params = {
+            'INPUT': outputs['FillSinksWangLiu']['OUTPUT_FILLED_DEM'],
+            'Z_FACTOR': 1,
+            'OUTPUT': parameters['AspectoFinal']
+        }
+        outputs['Aspecto'] = processing.run('native:aspect', alg_params,
+         context=context, feedback=feedback, is_child_algorithm=True)
+        results['AspectoFinal'] = outputs['Aspecto']['OUTPUT']
+        return results
+
+    def name(self) -> str:
+        return 'modelo'
+
+    def displayName(self) -> str:
+        return 'modelo'
+
+    def group(self) -> str:
+        return ''
+
+    def groupId(self) -> str:
+        return ''
+
+    def createInstance(self):
+        return self.__class__()
+```
+
+::: {.callout-note}
+## Modelo Gráfico y Capas Adjuntas
+Para garantizar la reproducibilidad técnica de este geoproceso, el archivo ejecutable del modelo final (`.model3`), diseñado mediante el Modelador Gráfico de QGIS, se encuentra adjunto en el directorio del proyecto dentro de la carpeta **`Model3QGIS/`** para su libre ejecución y evaluación.
+
+Asimismo, todas las capas ráster resultantes de este flujo de trabajo se encuentran consolidadas y disponibles en la carpeta **`CapaGeneradorModelos/`**.
+:::
+
+{{< pagebreak >}}
+
+# Conclusiones
+
+A partir del desarrollo metodológico y analítico ejecutado durante la presente práctica, el equipo concluye lo siguiente:
+
+1. Limitaciones de la Interpolación Determinística: Se comprobó que el algoritmo IDW es ineficiente frente a la alta variabilidad del relieve andino colombiano. Su formulación matemática estricta restringe la interpolación natural, generando mesetas artificiales o efectos de "ojo de buey" cuando el muestreo es irregular. Por el contrario, los algoritmos basados en Splines (Multilevel B-Splines) demostraron una superioridad evidente al comportarse como una superficie elástica que minimiza la varianza y genera transiciones topográficas coherentes.
+
+2. Impacto del Enfoque Hidrológico según el Terreno: Durante el análisis comparativo de la Acumulación de Flujo, se evidenció que la elección del algoritmo debe obedecer a la morfología de la cuenca. Mientras que el enrutamiento múltiple (MFD) de GRASS generó áreas sobresaturadas e irreales en la planicie de la Sabana, el algoritmo unidireccional (D8) de SAGA GIS logró delinear de forma mucho más precisa y realista las redes de canalización del flujo en terrenos de baja pendiente.
+
+3. Eficiencia en la Derivación Morfométrica: La contrastación entre motores espaciales para el cálculo del Índice de Rugosidad Terrestre (TRI) demostró que las herramientas nativas fundamentadas en GDAL ofrecen una ventaja significativa en términos de eficiencia computacional y manejo restrictivo de bordes (NoData) respecto a SAGA NextGen. Además, GDAL proporcionó un mayor contraste visual, facilitando la identificación morfológica de micro-escarpes.
+
+4. Valor de la Automatización y Reproducibilidad: La implementación de rutinas en Python/GEE para la extracción de modelos SRTM, así como la construcción de diagramas de flujo mediante el Modelador Gráfico de QGIS, optimizaron exponencialmente los tiempos de procesamiento (reduciéndolos de 4.5 a menos de 1 segundo en iteraciones finales). Esto ratifica que la estandarización de flujos de trabajo (.model3 y scripts en código abierto) es el paradigma idóneo para la ingeniería geomática actual, eliminando el error humano en secuencias repetitivas de acondicionamiento.
+
+{{< pagebreak >}}
+
+# Repositorio de Control de Versiones
+
+Garantizando el paradigma de reproducibilidad técnica exigido, la estructura del directorio de trabajo con los códigos fuente, las metodologías implementadas, las exportaciones cartográficas y los entregables finales generados por el equipo de trabajo se encuentra organizada de la siguiente manera:
+
+```text
+Practica_9_MDE/
+├── practica_9_10_11_mde.qmd         # Archivo fuente analítico (Quarto)
+├── practica_9_10_11_mde.html        # Reporte interactivo renderizado
+├── practica_9_10_11_mde.pdf         # Reporte formal renderizado
+├── CapaGeneradorModelos/      # Capas ráster resultantes del Modelador Gráfico
+├── data_hidro/                # Insumos topográficos y derivados hidrológicos
+├── data_mde/                  # Modelos digitales de elevación e interpolaciones
+├── images/                    # Evidencias visuales y capturas de geoprocesos
+├── maps/                      # Exportaciones cartográficas finales en PDF
+├── Model3QGIS/                # Archivo ejecutable del modelo final (.model3)
+├── python/                    # Scripts independientes de geoprocesamiento
+└── referencias.bib            # Base de datos bibliográfica
+```
+Todos estos elementos se encuentran consolidados y disponibles en el siguiente directorio público:
+
+🔗 **Repositorio GitHub:** [https://github.com/pperillav/Practica_9_10_11_MDE](https://github.com/pperillav/Practica_9_10_11_MDE)
+
+
+
+
+# Referencias Bibliográficas
+::: {#refs}
+:::

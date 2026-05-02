@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SAGA_METADATA>
+  <DATABASE></DATABASE>
+  <SOURCE></SOURCE>
+  <HISTORY saga-version="9.10.2">
+    <TOOL library="ta_hydrology" id="6" name="Flow Path Length">
+      <OPTION type="grid_system" id="PARAMETERS_GRID_SYSTEM" name="Grid System">
+        <CELLSIZE>0.0002694945852359</CELLSIZE>
+        <XMIN>-74.21840453207702</XMIN>
+        <YMIN>4.503119771998543</YMIN>
+        <XMAX>-73.94917944142635</XMAX>
+        <YMAX>4.772883851819679</YMAX>
+      </OPTION>
+      <OPTION type="boolean" id="SEEDS_ONLY" name="Seeds Only">false</OPTION>
+      <OPTION type="choice" id="METHOD" name="Flow Routing Algorithm" index="1">Multiple Flow Direction (FD8)</OPTION>
+      <OPTION type="double" id="CONVERGENCE" name="Convergence (FD8)">1.1</OPTION>
+      <INPUT type="grid" id="ELEVATION" name="Elevation" system="PARAMETERS_GRID_SYSTEM">
+        <TOOL library="io_gdal" id="0" name="Import Raster">
+          <OPTION type="file" id="FILES" name="Files">"C:/Users/PEDRO/Documents/pperillav/practica_9_mde/data/mde_fill.sdat"</OPTION>
+          <OPTION type="choice" id="MULTIPLE" name="Multiple Bands Output" index="2">automatic</OPTION>
+          <OPTION type="text" id="SUBSETS" name="Subsets"/>
+          <OPTION type="text" id="SELECTION" name="Select from Multiple Bands"/>
+          <OPTION type="boolean" id="TRANSFORM" name="Transformation">true</OPTION>
+          <OPTION type="choice" id="RESAMPLING" name="Resampling" index="3">Cubic 2</OPTION>
+          <OPTION type="choice" id="EXTENT" name="Extent" index="0">original</OPTION>
+          <OUTPUT type="grid_list" id="GRIDS" name="Grids">mde_fill</OUTPUT>
+        </TOOL>
+      </INPUT>
+      <OUTPUT type="grid" id="LENGTH" name="Flow Path Length">Flow Path Length</OUTPUT>
+    </TOOL>
+  </HISTORY>
+  <FILE></FILE>
+  <DESCRIPTION></DESCRIPTION>
+  <PROJECTION>
+    <WKT2>GEODCRS["WGS 84",DATUM["World Geodetic System 1984",ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]],CS[ellipsoidal,2],AXIS["geodetic latitude (Lat)",north,ORDER[1],ANGLEUNIT["degree",0.0174532925199433]],AXIS["geodetic longitude (Lon)",east,ORDER[2],ANGLEUNIT["degree",0.0174532925199433]],ID["EPSG",4326]]</WKT2>
+    <PROJ>+proj=longlat +datum=WGS84 +no_defs +type=crs</PROJ>
+    <CODE authority="EPSG">4326</CODE>
+  </PROJECTION>
+</SAGA_METADATA>

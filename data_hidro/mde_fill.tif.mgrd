@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SAGA_METADATA>
+  <DATABASE></DATABASE>
+  <SOURCE></SOURCE>
+  <HISTORY saga-version="9.11.1">
+    <TOOL library="ta_morphometry" id="0" name="Slope, Aspect, Curvature">
+      <OPTION type="grid_system" id="PARAMETERS_GRID_SYSTEM" name="Grid System">
+        <CELLSIZE>0.0002694945852359</CELLSIZE>
+        <XMIN>-74.21840453207702</XMIN>
+        <YMIN>4.503119771998543</YMIN>
+        <XMAX>-73.94917944142635</XMAX>
+        <YMAX>4.772883851819679</YMAX>
+      </OPTION>
+      <OPTION type="choice" id="METHOD" name="Method" index="6">9 parameter 2nd order polynom (Zevenbergen &amp; Thorne 1987)</OPTION>
+      <OPTION type="choice" id="UNIT_SLOPE" name="Unit" index="1">degree</OPTION>
+      <OPTION type="choice" id="UNIT_ASPECT" name="Unit" index="1">degree</OPTION>
+      <INPUT type="grid" id="ELEVATION" name="Elevation" system="PARAMETERS_GRID_SYSTEM">
+        <TOOL library="io_gdal" id="0" name="Import Raster">
+          <OPTION type="file" id="FILES" name="Files">"D:/Descargas/mde_bogota_srtm_elevation.tif"</OPTION>
+          <OPTION type="choice" id="MULTIPLE" name="Multiple Bands Output" index="2">automatic</OPTION>
+          <OPTION type="text" id="SUBSETS" name="Subsets"/>
+          <OPTION type="text" id="SELECTION" name="Select from Multiple Bands"/>
+          <OPTION type="boolean" id="TRANSFORM" name="Transformation">true</OPTION>
+          <OPTION type="choice" id="RESAMPLING" name="Resampling" index="3">Cubic 2</OPTION>
+          <OPTION type="choice" id="EXTENT" name="Extent" index="0">original</OPTION>
+          <OUTPUT type="grid_list" id="GRIDS" name="Grids">mde_bogota_srtm_elevation</OUTPUT>
+        </TOOL>
+      </INPUT>
+      <OUTPUT type="grid" id="SLOPE" name="Slope">Slope</OUTPUT>
+    </TOOL>
+  </HISTORY>
+  <FILE></FILE>
+  <DESCRIPTION></DESCRIPTION>
+  <PROJECTION>
+    <WKT2>GEODCRS["WGS 84",DATUM["World Geodetic System 1984",ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]],CS[ellipsoidal,2],AXIS["geodetic latitude (Lat)",north,ORDER[1],ANGLEUNIT["degree",0.0174532925199433]],AXIS["geodetic longitude (Lon)",east,ORDER[2],ANGLEUNIT["degree",0.0174532925199433]],ID["EPSG",4326]]</WKT2>
+    <PROJ>+proj=longlat +datum=WGS84 +no_defs +type=crs</PROJ>
+    <CODE authority="EPSG">4326</CODE>
+  </PROJECTION>
+</SAGA_METADATA>
